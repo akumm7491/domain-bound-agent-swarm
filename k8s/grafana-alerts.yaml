@@ -1,0 +1,228 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting
+  namespace: asmmp
+data:
+  alert_rules.yaml: |
+    groups:
+    - name: ASMMP Alerts
+      folder: Alerts
+      interval: 1m
+      rules:
+      - title: High CPU Usage
+        uid: high_cpu_usage
+        condition: B
+        data:
+        - refId: A
+          relativeTimeRange:
+            from: 300
+            to: 0
+          datasourceUid: prometheus
+          model:
+            expr: avg(rate(process_cpu_seconds_total{namespace="asmmp"}[5m])) * 100
+        - refId: B
+          relativeTimeRange:
+            from: 0
+            to: 0
+          datasourceUid: __expr__
+          model:
+            conditions:
+            - evaluator:
+                params:
+                - 80
+                type: gt
+              operator:
+                type: and
+              query:
+                params:
+                - A
+              reducer:
+                type: last
+            type: classic_conditions
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High CPU usage detected
+          description: CPU usage is above 80% for 5 minutes
+      - title: High Memory Usage
+        uid: high_memory_usage
+        condition: B
+        data:
+        - refId: A
+          relativeTimeRange:
+            from: 300
+            to: 0
+          datasourceUid: prometheus
+          model:
+            expr: avg(process_resident_memory_bytes{namespace="asmmp"}) / 1024 / 1024
+        - refId: B
+          relativeTimeRange:
+            from: 0
+            to: 0
+          datasourceUid: __expr__
+          model:
+            conditions:
+            - evaluator:
+                params:
+                - 500
+                type: gt
+              operator:
+                type: and
+              query:
+                params:
+                - A
+              reducer:
+                type: last
+            type: classic_conditions
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High memory usage detected
+          description: Memory usage is above 500MB for 5 minutes
+      - title: High Event Loop Lag
+        uid: high_event_loop_lag
+        condition: B
+        data:
+        - refId: A
+          relativeTimeRange:
+            from: 300
+            to: 0
+          datasourceUid: prometheus
+          model:
+            expr: max(nodejs_eventloop_lag_seconds{namespace="asmmp"})
+        - refId: B
+          relativeTimeRange:
+            from: 0
+            to: 0
+          datasourceUid: __expr__
+          model:
+            conditions:
+            - evaluator:
+                params:
+                - 1
+                type: gt
+              operator:
+                type: and
+              query:
+                params:
+                - A
+              reducer:
+                type: last
+            type: classic_conditions
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: High event loop lag detected
+          description: Event loop lag is above 1 second
+      - title: Platform Connection Issues
+        uid: platform_connection_issues
+        condition: B
+        data:
+        - refId: A
+          relativeTimeRange:
+            from: 300
+            to: 0
+          datasourceUid: prometheus
+          model:
+            expr: sum(up{namespace="asmmp"})
+        - refId: B
+          relativeTimeRange:
+            from: 0
+            to: 0
+          datasourceUid: __expr__
+          model:
+            conditions:
+            - evaluator:
+                params:
+                - 1
+                type: lt
+              operator:
+                type: and
+              query:
+                params:
+                - A
+              reducer:
+                type: last
+            type: classic_conditions
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Platform connection issues detected
+          description: One or more platform connections are down
+      - title: Low Content Generation Rate
+        uid: low_content_generation_rate
+        condition: B
+        data:
+        - refId: A
+          relativeTimeRange:
+            from: 900
+            to: 0
+          datasourceUid: prometheus
+          model:
+            expr: rate(content_generation_total{namespace="asmmp"}[15m])
+        - refId: B
+          relativeTimeRange:
+            from: 0
+            to: 0
+          datasourceUid: __expr__
+          model:
+            conditions:
+            - evaluator:
+                params:
+                - 0.1
+                type: lt
+              operator:
+                type: and
+              query:
+                params:
+                - A
+              reducer:
+                type: last
+            type: classic_conditions
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Low content generation rate
+          description: Content generation rate is below expected threshold
+      - title: High Post Latency
+        uid: high_post_latency
+        condition: B
+        data:
+        - refId: A
+          relativeTimeRange:
+            from: 300
+            to: 0
+          datasourceUid: prometheus
+          model:
+            expr: rate(post_latency_seconds_sum{namespace="asmmp"}[5m]) / rate(post_latency_seconds_count{namespace="asmmp"}[5m])
+        - refId: B
+          relativeTimeRange:
+            from: 0
+            to: 0
+          datasourceUid: __expr__
+          model:
+            conditions:
+            - evaluator:
+                params:
+                - 2
+                type: gt
+              operator:
+                type: and
+              query:
+                params:
+                - A
+              reducer:
+                type: last
+            type: classic_conditions
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High post latency detected
+          description: Average post latency is above 2 seconds

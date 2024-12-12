@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: asmmp
+  labels:
+    name: asmmp
+    environment: production
+    app.kubernetes.io/name: asmmp
+    app.kubernetes.io/part-of: social-media-platform
+  annotations:
+    description: "AI Social Media Management Platform namespace" 
