@@ -32,6 +32,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
         
+      - name: Run YAML linting
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_file: .yamllint
+          
       - name: Run linting
         run: npm run lint
         
