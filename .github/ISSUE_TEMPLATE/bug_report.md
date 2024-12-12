@@ -21,6 +21,7 @@ A clear and concise description of what you expected to happen.
 
 **Screenshots**
 If applicable, add screenshots to help explain your problem.
+⚠️ Please ensure no sensitive information is visible in screenshots.
 
 **Environment (please complete the following information):**
 - OS: [e.g. macOS]
@@ -29,10 +30,18 @@ If applicable, add screenshots to help explain your problem.
 - Docker Version: [e.g. 20.10.8]
 - Kubernetes Version: [e.g. 1.25.0]
 
+**Security Impact**
+- [ ] This bug exposes sensitive information
+- [ ] This bug affects authentication/authorization
+- [ ] This bug affects data integrity
+- [ ] This bug affects system availability
+- [ ] This bug has no security impact
+
 **Additional context**
 Add any other context about the problem here.
 
 **Logs**
 ```
 Paste any relevant logs here
+⚠️ Please ensure logs are sanitized and contain no sensitive information
 ``` 

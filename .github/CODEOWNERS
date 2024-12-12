@@ -18,4 +18,16 @@ docker-compose.yml @adamkumm
 # Configuration files
 *.json @adamkumm
 *.yml @adamkumm
-*.yaml @adamkumm 
+*.yaml @adamkumm
+
+# Security-sensitive files
+.env* @adamkumm
+**/secret*.yml @adamkumm
+**/secret*.yaml @adamkumm
+**/credentials*.json @adamkumm
+**/auth*.ts @adamkumm
+**/security*.ts @adamkumm
+
+# Documentation
+*.md @adamkumm
+/docs/ @adamkumm 

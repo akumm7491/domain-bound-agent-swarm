@@ -9,9 +9,20 @@ rules:
   indentation:
     spaces: 2
     indent-sequences: consistent
+  empty-lines:
+    max: 2
+    max-start: 0
+    max-end: 0
+  key-duplicates: enable
+  new-line-at-end-of-file: enable
+  trailing-spaces: enable
+  quoted-strings:
+    quote-type: single
+    required: false
 
 ignore: |
   node_modules/
   dist/
   coverage/
-  .git/ 
+  .git/
+  *.env* 
