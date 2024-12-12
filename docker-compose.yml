@@ -8,11 +8,11 @@ services:
     environment:
       - NODE_ENV=production
       - REDIS_URL=redis://redis:6379
-      - OPENAI_API_KEY=dummy-key
-      - DISABLE_PLATFORM_INIT=true
-      - DISABLE_TWITTER=true
-      - DISABLE_TELEGRAM=true
-      - DISABLE_DISCORD=true
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-dummy-key}
+      - DISABLE_PLATFORM_INIT=${DISABLE_PLATFORM_INIT:-true}
+      - DISABLE_TWITTER=${DISABLE_TWITTER:-true}
+      - DISABLE_TELEGRAM=${DISABLE_TELEGRAM:-true}
+      - DISABLE_DISCORD=${DISABLE_DISCORD:-true}
     depends_on:
       redis:
         condition: service_healthy
