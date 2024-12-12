@@ -16,10 +16,10 @@ spec:
   selector:
     app: asmmp
   ports:
-  - port: 3000
-    targetPort: 3000
-    name: http
-    protocol: TCP
+    - port: 3000
+      targetPort: 3000
+      name: http
+      protocol: TCP
   sessionAffinity: ClientIP
   sessionAffinityConfig:
     clientIP:

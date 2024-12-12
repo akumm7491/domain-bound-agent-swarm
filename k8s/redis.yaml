@@ -17,52 +17,52 @@ spec:
         app: redis
     spec:
       tolerations:
-      - key: "node.kubernetes.io/disk-pressure"
-        operator: "Exists"
-        effect: "NoSchedule"
+        - key: "node.kubernetes.io/disk-pressure"
+          operator: "Exists"
+          effect: "NoSchedule"
       containers:
-      - name: redis
-        image: redis:7.0-alpine
-        command: ["redis-server"]
-        args: ["/etc/redis/redis.conf"]
-        ports:
-        - containerPort: 6379
-          name: redis
+        - name: redis
+          image: redis:7.0-alpine
+          command: ["redis-server"]
+          args: ["/etc/redis/redis.conf"]
+          ports:
+            - containerPort: 6379
+              name: redis
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "100m"
+              memory: "256Mi"
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: redis-config
+              mountPath: /etc/redis
+      volumes:
+        - name: redis-config
+          configMap:
+            name: redis-config
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: redis-local-storage
         resources:
           requests:
-            cpu: "50m"
-            memory: "128Mi"
-          limits:
-            cpu: "100m"
-            memory: "256Mi"
-        livenessProbe:
-          tcpSocket:
-            port: redis
-          initialDelaySeconds: 15
-          periodSeconds: 20
-        readinessProbe:
-          exec:
-            command: ["redis-cli", "ping"]
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        volumeMounts:
-        - name: redis-data
-          mountPath: /data
-        - name: redis-config
-          mountPath: /etc/redis
-      volumes:
-      - name: redis-config
-        configMap:
-          name: redis-config
-  volumeClaimTemplates:
-  - metadata:
-      name: redis-data
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      storageClassName: redis-local-storage
-      resources:
-        requests:
-          storage: 256Mi
+            storage: 256Mi
 ---
 apiVersion: v1
 kind: Service
@@ -73,9 +73,9 @@ metadata:
     app: redis
 spec:
   ports:
-  - port: 6379
-    targetPort: 6379
-    name: redis
+    - port: 6379
+      targetPort: 6379
+      name: redis
   selector:
     app: redis
   clusterIP: None 

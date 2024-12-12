@@ -27,68 +27,68 @@ spec:
         prometheus.io/path: "/metrics"
     spec:
       containers:
-      - name: asmmp
-        image: asmmp:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - name: http
-          containerPort: 3000
-          protocol: TCP
-        envFrom:
-        - configMapRef:
-            name: asmmp-config
-        - secretRef:
-            name: asmmp-secrets
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "256Mi"
-          limits:
-            cpu: "500m"
-            memory: "512Mi"
-        startupProbe:
-          httpGet:
-            path: /health
-            port: http
-          failureThreshold: 30
-          periodSeconds: 10
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: http
-          initialDelaySeconds: 0
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
-        readinessProbe:
-          httpGet:
-            path: /health/ready
-            port: http
-          initialDelaySeconds: 0
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
-        lifecycle:
-          preStop:
-            exec:
-              command: ["/bin/sh", "-c", "sleep 10"]
-        volumeMounts:
-        - name: redis-config
-          mountPath: /app/config/redis
-        - name: app-data
-          mountPath: /app/data
-        - name: app-logs
-          mountPath: /app/logs
+        - name: asmmp
+          image: asmmp:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: asmmp-config
+            - secretRef:
+                name: asmmp-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            failureThreshold: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+          volumeMounts:
+            - name: redis-config
+              mountPath: /app/config/redis
+            - name: app-data
+              mountPath: /app/data
+            - name: app-logs
+              mountPath: /app/logs
       volumes:
-      - name: redis-config
-        configMap:
-          name: redis-config
-      - name: app-data
-        persistentVolumeClaim:
-          claimName: asmmp-data
-      - name: app-logs
-        persistentVolumeClaim:
-          claimName: asmmp-logs
+        - name: redis-config
+          configMap:
+            name: redis-config
+        - name: app-data
+          persistentVolumeClaim:
+            claimName: asmmp-data
+        - name: app-logs
+          persistentVolumeClaim:
+            claimName: asmmp-logs
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -131,15 +131,15 @@ spec:
   minReplicas: 1
   maxReplicas: 5
   metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80 
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80 

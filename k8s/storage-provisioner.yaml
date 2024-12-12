@@ -15,7 +15,7 @@ spec:
     storage: 1Gi
   volumeMode: Filesystem
   accessModes:
-  - ReadWriteOnce
+    - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: redis-local-storage
   hostPath:
@@ -32,7 +32,7 @@ spec:
     storage: 1Gi
   volumeMode: Filesystem
   accessModes:
-  - ReadWriteOnce
+    - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: standard
   hostPath:
@@ -49,7 +49,7 @@ spec:
     storage: 1Gi
   volumeMode: Filesystem
   accessModes:
-  - ReadWriteOnce
+    - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: standard
   hostPath:
