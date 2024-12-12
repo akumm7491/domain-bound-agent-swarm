@@ -1,0 +1,21 @@
+# Default owners for everything in the repo
+* @adamkumm
+
+# Infrastructure code
+/k8s/ @adamkumm
+/scripts/ @adamkumm
+/.github/ @adamkumm
+Dockerfile @adamkumm
+docker-compose.yml @adamkumm
+
+# Core application code
+/src/domain/ @adamkumm
+/src/events/ @adamkumm
+/src/agents/ @adamkumm
+/src/platforms/ @adamkumm
+/src/content/ @adamkumm
+
+# Configuration files
+*.json @adamkumm
+*.yml @adamkumm
+*.yaml @adamkumm 
