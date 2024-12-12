@@ -1,0 +1,71 @@
+name: Continuous Deployment
+
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+  deployments: write
+
+jobs:
+  deploy-production:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          
+      - name: Deploy to production
+        run: |
+          # Update image to latest version
+          kubectl set image deployment/asmmp asmmp=ghcr.io/${{ github.repository }}:${{ github.sha }} -n asmmp
+          
+          # Wait for rollout to complete
+          kubectl rollout status deployment/asmmp -n asmmp --timeout=300s
+          
+      - name: Verify deployment
+        run: |
+          # Check deployment status
+          kubectl get deployment asmmp -n asmmp -o wide
+          
+          # Check pod status
+          kubectl get pods -n asmmp -l app=asmmp
+          
+          # Check service status
+          kubectl get svc -n asmmp
+          
+      - name: Run smoke tests
+        run: |
+          # Wait for service to be ready
+          sleep 30
+          
+          # Get service URL
+          SERVICE_URL=$(kubectl get svc asmmp-service -n asmmp -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          
+          # Run health check
+          curl -f http://$SERVICE_URL:3000/health || exit 1
+          
+      - name: Create deployment status
+        if: always()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment-url: http://${{ steps.deploy.outputs.service_url }}
+          state: ${{ job.status }}
+          deployment-id: ${{ github.event.deployment.id }} 

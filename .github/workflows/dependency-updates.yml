@@ -1,0 +1,53 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # Run weekly on Monday
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Check for updates
+        id: ncu
+        run: |
+          npm install -g npm-check-updates
+          ncu > updates.txt
+          cat updates.txt
+          
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(deps): update dependencies"
+          title: "chore(deps): update dependencies"
+          body: |
+            Automated dependency updates.
+            
+            <details>
+            <summary>Updates</summary>
+            
+            ```
+            $(cat updates.txt)
+            ```
+            
+            </details>
+          branch: "chore/dependency-updates"
+          base: "main"
+          labels: "dependencies"
+          assignees: "adamkumm"
+          reviewers: "adamkumm"
+          delete-branch: true 
