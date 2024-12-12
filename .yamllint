@@ -25,4 +25,6 @@ ignore: |
   dist/
   coverage/
   .git/
-  *.env* 
+  *.env*
+  k8s/*.yaml
+  monitoring/*.yaml 
