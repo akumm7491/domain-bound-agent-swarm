@@ -1,8 +1,13 @@
-// Extend Jest matchers
-import 'jest'
+import '@jest/globals'
 
 // Set test environment variables
 process.env.NODE_ENV = 'test'
+
+// Reset mocks between tests
+beforeEach(() => {
+  jest.resetModules()
+  jest.clearAllMocks()
+})
 
 // Global test setup
 beforeAll(() => {
@@ -11,11 +16,5 @@ beforeAll(() => {
 
 // Global test teardown
 afterAll(() => {
-  // Add any global cleanup here
-})
-
-// Reset mocks between tests
-beforeEach(() => {
-  jest.resetModules()
-  jest.clearAllMocks()
+  // Add any global teardown here
 })
