@@ -1,207 +1,250 @@
-import OpenAI from 'openai'
+import { OpenAI } from 'openai'
 import { Platform } from '../../domain/types'
 import {
   ContentGenerator,
   ContentTemplate,
-  ContentRequest,
+  GenerationParams,
 } from '../ContentGenerator'
 
 // Mock OpenAI
-jest.mock('openai', () => {
-  return jest.fn().mockImplementation(() => ({
-    chat: {
-      completions: {
-        create: jest.fn().mockResolvedValue({
-          choices: [
-            {
-              message: {
-                content: 'Generated content for testing',
-              },
-            },
-          ],
-        }),
-      },
-    },
-  }))
-})
+jest.mock('openai')
 
 describe('ContentGenerator', () => {
   let generator: ContentGenerator
+  let mockOpenAI: jest.Mocked<OpenAI>
   let mockTemplate: ContentTemplate
-  let mockRequest: ContentRequest
+  let mockCreate: jest.Mock
 
   beforeEach(() => {
-    generator = new ContentGenerator('test-api-key')
-
+    // Set up mock template
     mockTemplate = {
-      id: 'test-template',
-      name: 'Test Template',
-      description: 'Template for testing',
-      prompt: 'Generate content about {topic} for {platform}',
-      variables: ['topic', 'platform'],
+      id: 'news-update',
+      name: 'News Update',
+      description: 'Share latest news',
+      prompt: 'Create news about {topic}',
+      variables: ['topic'],
       platforms: [Platform.TWITTER],
       format: {
         maxLength: 280,
-        requiresMedia: false,
-        style: 'test',
       },
     }
 
-    mockRequest = {
-      domain: 'test-domain',
-      template: mockTemplate,
-      variables: {
-        topic: 'test topic',
-        platform: 'Twitter',
-      },
-      platforms: [Platform.TWITTER],
+    // Set up mock OpenAI response
+    const mockResponse = {
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              content: {
+                text: 'Generated test content',
+              },
+              variations: ['Variation 1', 'Variation 2'],
+              metadata: {
+                sentiment: 'positive',
+                keywords: ['test', 'content'],
+                performance: {
+                  expectedEngagement: 80,
+                  confidenceScore: 70,
+                },
+              },
+            }),
+          },
+          index: 0,
+          finish_reason: 'stop',
+        },
+      ],
+      created: Date.now(),
+      model: 'gpt-4',
+      object: 'chat.completion',
+      id: 'test-id',
     }
 
-    generator.registerTemplate(mockTemplate)
+    // Set up mock create function
+    mockCreate = jest.fn().mockResolvedValue(mockResponse)
+
+    // Set up mock OpenAI client
+    mockOpenAI = {
+      chat: {
+        completions: {
+          create: mockCreate,
+        },
+      },
+    } as unknown as jest.Mocked<OpenAI>
+
+    // Mock OpenAI constructor
+    ;(OpenAI as jest.MockedClass<typeof OpenAI>).mockImplementation(
+      () => mockOpenAI,
+    )
+
+    generator = new ContentGenerator({
+      openai: {
+        apiKey: 'test-api-key',
+        model: 'gpt-4',
+      },
+      templates: [mockTemplate],
+    })
   })
 
   describe('template management', () => {
-    test('should register and retrieve template', () => {
-      const template = generator.getTemplate('test-template')
+    test('should get template by id', () => {
+      const template = generator.getTemplate('news-update')
       expect(template).toEqual(mockTemplate)
     })
 
-    test('should have default templates', () => {
-      expect(generator.getTemplate('news-update')).toBeDefined()
-      expect(generator.getTemplate('insight-share')).toBeDefined()
-      expect(generator.getTemplate('trend-analysis')).toBeDefined()
+    test('should throw error for invalid template', () => {
+      expect(() => generator.getTemplate('invalid')).toThrow(
+        'Template invalid not found',
+      )
     })
   })
 
   describe('content generation', () => {
-    test('should generate content with variations', async () => {
-      const response = await generator.generateContent(mockRequest)
-
-      expect(response.content).toBeDefined()
-      expect(response.content.text).toBe('Generated content for testing')
-      expect(response.variations).toHaveLength(1)
-      expect(response.metadata.template).toBe('test-template')
-      expect(response.metadata.performance).toBeDefined()
-    })
-
-    test('should include context in generation', async () => {
-      const requestWithContext = {
-        ...mockRequest,
-        context: {
-          recentPosts: [{ text: 'Previous post' }],
-          trending: ['trend1', 'trend2'],
-          timeOfDay: 'morning',
-        },
+    test('should generate content with template', async () => {
+      const params: GenerationParams = {
+        templateId: 'news-update',
+        variables: { topic: 'AI technology' },
+        platforms: [Platform.TWITTER],
       }
 
-      const response = await generator.generateContent(requestWithContext)
-      expect(response.content).toBeDefined()
-      expect(response.metadata.generationParams.domain).toBe('test-domain')
+      const result = await generator.generateContent(params)
+
+      expect(result.content.text).toBe('Generated test content')
+      expect(result.variations).toHaveLength(2)
+      expect(result.metadata.performance.expectedEngagement).toBe(80)
+      expect(result.metadata.performance.confidenceScore).toBe(70)
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gpt-4',
+          messages: expect.arrayContaining([
+            expect.objectContaining({
+              content: expect.stringContaining('AI technology'),
+            }),
+          ]),
+        }),
+      )
     })
 
-    test('should throw error for invalid template', async () => {
-      const invalidRequest = {
-        ...mockRequest,
-        template: { ...mockTemplate, id: 'invalid-template' },
+    test('should handle generation error', async () => {
+      const mockError = new Error('Generation failed')
+      mockCreate.mockRejectedValueOnce(mockError)
+
+      const params: GenerationParams = {
+        templateId: 'news-update',
+        variables: { topic: 'AI technology' },
+        platforms: [Platform.TWITTER],
       }
 
-      await expect(generator.generateContent(invalidRequest)).rejects.toThrow(
-        'Template invalid-template not found',
+      await expect(generator.generateContent(params)).rejects.toThrow(
+        'Generation failed',
+      )
+    })
+
+    test('should handle invalid JSON response', async () => {
+      const invalidResponse = {
+        choices: [
+          {
+            message: {
+              content: 'Invalid JSON',
+            },
+            index: 0,
+            finish_reason: 'stop',
+          },
+        ],
+        created: Date.now(),
+        model: 'gpt-4',
+        object: 'chat.completion',
+        id: 'test-id',
+      }
+
+      mockCreate.mockResolvedValueOnce(invalidResponse)
+
+      const params: GenerationParams = {
+        templateId: 'news-update',
+        variables: { topic: 'AI technology' },
+        platforms: [Platform.TWITTER],
+      }
+
+      await expect(generator.generateContent(params)).rejects.toThrow(
+        'Invalid response format',
       )
     })
   })
 
-  describe('performance analysis', () => {
-    test('should include performance metrics', async () => {
-      // Mock the OpenAI response for performance analysis
-      const mockOpenAI = OpenAI as jest.MockedClass<typeof OpenAI>
-      const mockCreate = jest
-        .fn()
-        .mockResolvedValueOnce({
-          choices: [
-            {
-              message: {
-                content: 'Generated content',
-              },
+  describe('content validation', () => {
+    test('should validate content length', async () => {
+      const longContent = 'a'.repeat(300)
+      const invalidResponse = {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                content: {
+                  text: longContent,
+                },
+                variations: [],
+                metadata: {
+                  performance: {
+                    expectedEngagement: 50,
+                    confidenceScore: 50,
+                  },
+                },
+              }),
             },
-          ],
-        })
-        .mockResolvedValueOnce({
-          choices: [
-            {
-              message: {
-                content: 'Platform variation',
-              },
-            },
-          ],
-        })
-        .mockResolvedValueOnce({
-          choices: [
-            {
-              message: {
-                content: 'Expected engagement: 85\nConfidence score: 75',
-              },
-            },
-          ],
-        })
+            index: 0,
+            finish_reason: 'stop',
+          },
+        ],
+        created: Date.now(),
+        model: 'gpt-4',
+        object: 'chat.completion',
+        id: 'test-id',
+      }
 
-      mockOpenAI.mockImplementation(
-        () =>
-          ({
-            chat: {
-              completions: {
-                create: mockCreate,
-              },
-            },
-          }) as any,
-      )
+      mockCreate.mockResolvedValueOnce(invalidResponse)
 
-      const response = await generator.generateContent(mockRequest)
-      expect(response.metadata.performance?.expectedEngagement).toBeDefined()
-      expect(response.metadata.performance?.confidenceScore).toBeDefined()
-    })
-  })
+      const params: GenerationParams = {
+        templateId: 'news-update',
+        variables: { topic: 'AI technology' },
+        platforms: [Platform.TWITTER],
+      }
 
-  describe('error handling', () => {
-    test('should handle OpenAI API errors', async () => {
-      const mockOpenAI = OpenAI as jest.MockedClass<typeof OpenAI>
-      const mockCreate = jest.fn().mockRejectedValueOnce(new Error('API Error'))
-
-      mockOpenAI.mockImplementation(
-        () =>
-          ({
-            chat: {
-              completions: {
-                create: mockCreate,
-              },
-            },
-          }) as any,
-      )
-
-      await expect(generator.generateContent(mockRequest)).rejects.toThrow(
-        'API Error',
+      await expect(generator.generateContent(params)).rejects.toThrow(
+        'Content exceeds maximum length',
       )
     })
 
-    test('should handle empty responses', async () => {
-      const mockOpenAI = OpenAI as jest.MockedClass<typeof OpenAI>
-      const mockCreate = jest.fn().mockResolvedValueOnce({
-        choices: [{ message: { content: null } }],
-      })
-
-      mockOpenAI.mockImplementation(
-        () =>
-          ({
-            chat: {
-              completions: {
-                create: mockCreate,
-              },
+    test('should validate required metadata', async () => {
+      const invalidResponse = {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                content: {
+                  text: 'Test content',
+                },
+                variations: [],
+              }),
             },
-          }) as any,
-      )
+            index: 0,
+            finish_reason: 'stop',
+          },
+        ],
+        created: Date.now(),
+        model: 'gpt-4',
+        object: 'chat.completion',
+        id: 'test-id',
+      }
 
-      await expect(generator.generateContent(mockRequest)).rejects.toThrow(
-        'No content generated',
+      mockCreate.mockResolvedValueOnce(invalidResponse)
+
+      const params: GenerationParams = {
+        templateId: 'news-update',
+        variables: { topic: 'AI technology' },
+        platforms: [Platform.TWITTER],
+      }
+
+      await expect(generator.generateContent(params)).rejects.toThrow(
+        'Missing required metadata',
       )
     })
   })

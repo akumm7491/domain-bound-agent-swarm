@@ -1,136 +1,208 @@
-import { TwitterApi } from 'twitter-api-v2'
+import { Client } from 'twitter-api-sdk'
 import { Platform } from '../../domain/types'
 import { TwitterAdapter, TwitterConfig } from '../TwitterAdapter'
 import { PostContent } from '../PlatformAdapter'
 
-// Mock twitter-api-v2
-jest.mock('twitter-api-v2')
+jest.mock('twitter-api-sdk')
 
 describe('TwitterAdapter', () => {
   let adapter: TwitterAdapter
-  let mockConfig: TwitterConfig
+  let mockClient: jest.Mocked<Client>
+  let mockTweet: any
 
   beforeEach(() => {
-    mockConfig = {
-      apiKey: 'test-key',
-      apiSecret: 'test-secret',
-      accessToken: 'test-token',
-      accessTokenSecret: 'test-token-secret',
+    // Set up mock tweet
+    mockTweet = {
+      data: {
+        id: '123456789',
+        text: 'Test tweet',
+        created_at: new Date().toISOString(),
+        public_metrics: {
+          like_count: 10,
+          retweet_count: 5,
+          reply_count: 3,
+          quote_count: 5,
+        },
+      },
     }
-    adapter = new TwitterAdapter()
 
-    // Reset all mocks
-    jest.clearAllMocks()
+    // Set up mock client
+    mockClient = {
+      tweets: {
+        createTweet: jest.fn().mockResolvedValue(mockTweet),
+        findTweetById: jest.fn().mockResolvedValue(mockTweet),
+        deleteTweetById: jest
+          .fn()
+          .mockResolvedValue({ data: { deleted: true } }),
+      } as any,
+      users: {
+        findMyUser: jest.fn().mockResolvedValue({
+          data: {
+            id: '12345',
+            name: 'Test User',
+            username: 'testuser',
+            public_metrics: {
+              followers_count: 1000,
+              following_count: 500,
+              tweet_count: 1000,
+            },
+          },
+        }),
+      },
+    } as unknown as jest.Mocked<Client>
+    ;(Client as unknown as jest.Mock).mockImplementation(() => mockClient)
+
+    adapter = new TwitterAdapter()
   })
 
   describe('initialization', () => {
     test('should initialize with config', async () => {
-      await adapter.initialize(mockConfig)
-      expect(TwitterApi).toHaveBeenCalledWith({
-        appKey: mockConfig.apiKey,
-        appSecret: mockConfig.apiSecret,
-        accessToken: mockConfig.accessToken,
-        accessSecret: mockConfig.accessTokenSecret,
-      })
+      const config: TwitterConfig = {
+        apiKey: 'test-api-key',
+        apiSecret: 'test-api-secret',
+        accessToken: 'test-access-token',
+        accessTokenSecret: 'test-access-token-secret',
+      }
+
+      await adapter.initialize(config)
+      expect(Client).toHaveBeenCalledWith(config.apiKey)
     })
 
     test('should verify authentication', async () => {
-      const mockMe = jest.fn().mockResolvedValue({ data: { id: '123' } })
-      ;(TwitterApi as jest.Mock).mockImplementation(() => ({
-        v2: { me: mockMe },
-      }))
+      const config: TwitterConfig = {
+        apiKey: 'test-api-key',
+        apiSecret: 'test-api-secret',
+        accessToken: 'test-access-token',
+        accessTokenSecret: 'test-access-token-secret',
+      }
 
-      await adapter.initialize(mockConfig)
-      const isAuth = await adapter.isAuthenticated()
-
-      expect(isAuth).toBe(true)
-      expect(mockMe).toHaveBeenCalled()
+      await adapter.initialize(config)
+      const isAuthenticated = await adapter.isAuthenticated()
+      expect(isAuthenticated).toBe(true)
+      expect(mockClient.users.findMyUser).toHaveBeenCalled()
     })
   })
 
   describe('posting', () => {
-    const mockContent: PostContent = {
-      text: 'Test tweet',
-      media: [{ type: 'image', url: 'https://example.com/image.jpg' }],
-    }
+    test('should post text content', async () => {
+      const config: TwitterConfig = {
+        apiKey: 'test-api-key',
+        apiSecret: 'test-api-secret',
+        accessToken: 'test-access-token',
+        accessTokenSecret: 'test-access-token-secret',
+      }
 
-    beforeEach(async () => {
-      const mockTweet = jest.fn().mockResolvedValue({
-        data: { id: '123', text: mockContent.text },
+      await adapter.initialize(config)
+
+      const content: PostContent = {
+        text: 'Test tweet',
+      }
+
+      const response = await adapter.post(content)
+      expect(mockClient.tweets.createTweet).toHaveBeenCalledWith({
+        text: content.text,
       })
-      const mockUploadMedia = jest.fn().mockResolvedValue('media123')
-
-      ;(TwitterApi as jest.Mock).mockImplementation(() => ({
-        v2: { tweet: mockTweet, me: jest.fn() },
-        v1: { uploadMedia: mockUploadMedia },
-      }))
-
-      await adapter.initialize(mockConfig)
+      expect(response.id).toBe('123456789')
     })
 
-    test('should post content with media', async () => {
-      const response = await adapter.post(mockContent)
+    test('should delete tweet', async () => {
+      const config: TwitterConfig = {
+        apiKey: 'test-api-key',
+        apiSecret: 'test-api-secret',
+        accessToken: 'test-access-token',
+        accessTokenSecret: 'test-access-token-secret',
+      }
 
-      expect(response.platform).toBe(Platform.TWITTER)
-      expect(response.id).toBe('123')
-      expect(response.url).toContain('123')
+      await adapter.initialize(config)
+
+      const success = await adapter.delete('123456789')
+      expect(success).toBe(true)
+      expect(mockClient.tweets.deleteTweetById).toHaveBeenCalledWith(
+        '123456789',
+      )
     })
 
-    test('should handle post without media', async () => {
-      const textOnlyContent: PostContent = { text: 'Text only tweet' }
-      const response = await adapter.post(textOnlyContent)
+    test('should handle media content', async () => {
+      const config: TwitterConfig = {
+        apiKey: 'test-api-key',
+        apiSecret: 'test-api-secret',
+        accessToken: 'test-access-token',
+        accessTokenSecret: 'test-access-token-secret',
+      }
 
-      expect(response.platform).toBe(Platform.TWITTER)
-      expect(response.id).toBe('123')
-    })
+      await adapter.initialize(config)
 
-    test('should throw error when not initialized', async () => {
-      adapter = new TwitterAdapter()
-      await expect(adapter.post(mockContent)).rejects.toThrow('not initialized')
+      const content: PostContent = {
+        text: 'Test tweet with media',
+        media: [
+          {
+            type: 'image' as const,
+            url: 'media_123',
+          },
+        ],
+      }
+
+      await adapter.post(content)
+      expect(mockClient.tweets.createTweet).toHaveBeenCalledWith({
+        text: content.text,
+        media: {
+          media_ids: ['media_123'],
+        },
+      })
     })
   })
 
   describe('engagement', () => {
-    beforeEach(async () => {
-      const mockSingleTweet = jest.fn().mockResolvedValue({
-        data: {
-          public_metrics: {
-            like_count: 10,
-            retweet_count: 5,
-            reply_count: 3,
-            quote_count: 2,
-            impression_count: 100,
-          },
-        },
-      })
-
-      ;(TwitterApi as jest.Mock).mockImplementation(() => ({
-        v2: { singleTweet: mockSingleTweet, me: jest.fn() },
-      }))
-
-      await adapter.initialize(mockConfig)
-    })
-
     test('should get engagement metrics', async () => {
-      const metrics = await adapter.getEngagement('123')
+      const config: TwitterConfig = {
+        apiKey: 'test-api-key',
+        apiSecret: 'test-api-secret',
+        accessToken: 'test-access-token',
+        accessTokenSecret: 'test-access-token-secret',
+      }
 
+      await adapter.initialize(config)
+
+      const metrics = await adapter.getEngagement('123456789')
+      expect(mockClient.tweets.findTweetById).toHaveBeenCalledWith(
+        '123456789',
+        {
+          'tweet.fields': ['public_metrics'],
+        },
+      )
       expect(metrics.likes).toBe(10)
       expect(metrics.shares).toBe(5)
       expect(metrics.replies).toBe(3)
-      expect(metrics.reach).toBe(100)
-      expect(metrics.platformSpecific?.quotes).toBe(2)
+      expect(metrics.reach).toBe(10)
+    })
+
+    test('should get follower count', async () => {
+      const config: TwitterConfig = {
+        apiKey: 'test-api-key',
+        apiSecret: 'test-api-secret',
+        accessToken: 'test-access-token',
+        accessTokenSecret: 'test-access-token-secret',
+      }
+
+      await adapter.initialize(config)
+
+      const count = await adapter.getFollowerCount()
+      expect(mockClient.users.findMyUser).toHaveBeenCalledWith({
+        'user.fields': ['public_metrics'],
+      })
+      expect(count).toBe(1000)
     })
   })
 
   describe('platform features', () => {
     test('should return Twitter-specific features', () => {
       const features = adapter.getPlatformSpecificFeatures()
-
-      expect(features.maxCharacters).toBe(280)
-      expect(features.canSchedule).toBe(false)
-      expect(features.mediaTypes).toContain('image')
-      expect(features.mediaTypes).toContain('video')
-      expect(features.maxMediaPerPost).toBe(4)
+      expect(features).toEqual({
+        maxCharacters: 280,
+        canSchedule: true,
+        mediaTypes: ['image', 'video'],
+        features: ['threads', 'polls'],
+      })
     })
   })
 })

@@ -135,6 +135,7 @@ async function initializePlatforms(runtime: AgentRuntime): Promise<void> {
         const telegramAdapter = new TelegramAdapter()
         await telegramAdapter.initialize({
           botToken: process.env.TELEGRAM_BOT_TOKEN || '',
+          channelId: process.env.TELEGRAM_CHANNEL_ID || '',
         })
         runtime.registerPlatform(Platform.TELEGRAM, telegramAdapter)
         initializationResults[Platform.TELEGRAM] = true

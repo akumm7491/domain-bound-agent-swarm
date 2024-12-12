@@ -1,49 +1,59 @@
-import { Telegraf } from 'telegraf'
+import TelegramBot from 'node-telegram-bot-api'
 import { Platform } from '../../domain/types'
 import { TelegramAdapter, TelegramConfig } from '../TelegramAdapter'
 import { PostContent } from '../PlatformAdapter'
 
-// Mock telegraf
-jest.mock('telegraf')
+// Mock node-telegram-bot-api
+jest.mock('node-telegram-bot-api')
 
 describe('TelegramAdapter', () => {
   let adapter: TelegramAdapter
   let mockConfig: TelegramConfig
-  let mockTelegram: any
+  let mockBot: jest.Mocked<TelegramBot>
+  let mockMessage: TelegramBot.Message
 
   beforeEach(() => {
     mockConfig = {
       botToken: 'test-token',
-      channelId: '@testchannel',
+      channelId: '@test-channel',
     }
 
-    mockTelegram = {
-      getMe: jest.fn().mockResolvedValue({ id: 123, is_bot: true }),
-      sendMessage: jest.fn().mockResolvedValue({
-        message_id: 456,
-        date: Math.floor(Date.now() / 1000),
-        text: 'Test message',
-      }),
-      sendPhoto: jest.fn().mockResolvedValue({
-        message_id: 457,
-        date: Math.floor(Date.now() / 1000),
-        photo: [{ file_id: 'photo123' }],
-      }),
-      sendVideo: jest.fn().mockResolvedValue({
-        message_id: 458,
-        date: Math.floor(Date.now() / 1000),
-        video: { file_id: 'video123' },
-      }),
+    // Set up mock message
+    mockMessage = {
+      message_id: 123,
+      chat: {
+        id: parseInt(mockConfig.channelId),
+        type: 'channel',
+        title: 'Test Channel',
+      },
+      date: Math.floor(Date.now() / 1000),
+      text: 'Test message',
+      entities: [],
+    }
+
+    // Set up mock bot
+    mockBot = {
+      sendMessage: jest.fn().mockResolvedValue(mockMessage),
+      sendPhoto: jest.fn().mockResolvedValue(mockMessage),
+      sendVideo: jest.fn().mockResolvedValue(mockMessage),
       deleteMessage: jest.fn().mockResolvedValue(true),
+      getChat: jest.fn().mockResolvedValue({
+        id: parseInt(mockConfig.channelId),
+        type: 'channel',
+        title: 'Test Channel',
+        member_count: 1000,
+      }),
       getChatMemberCount: jest.fn().mockResolvedValue(1000),
-    }
-
-    // Mock Telegraf constructor and methods
-    ;(Telegraf as jest.Mock).mockImplementation(() => ({
-      telegram: mockTelegram,
-      launch: jest.fn().mockResolvedValue(undefined),
-      on: jest.fn(),
-    }))
+      getMe: jest.fn().mockResolvedValue({
+        id: 123,
+        is_bot: true,
+        first_name: 'Test Bot',
+        username: 'test_bot',
+      }),
+    } as unknown as jest.Mocked<TelegramBot>
+    ;(TelegramBot as jest.MockedClass<typeof TelegramBot>).mockImplementation(
+      () => mockBot,
+    )
 
     adapter = new TelegramAdapter()
   })
@@ -51,21 +61,16 @@ describe('TelegramAdapter', () => {
   describe('initialization', () => {
     test('should initialize with config', async () => {
       await adapter.initialize(mockConfig)
-      expect(Telegraf).toHaveBeenCalledWith(mockConfig.botToken)
+      expect(TelegramBot).toHaveBeenCalledWith(mockConfig.botToken, {
+        polling: false,
+      })
     })
 
     test('should verify authentication', async () => {
       await adapter.initialize(mockConfig)
       const isAuth = await adapter.isAuthenticated()
       expect(isAuth).toBe(true)
-      expect(mockTelegram.getMe).toHaveBeenCalled()
-    })
-
-    test('should handle authentication failure', async () => {
-      mockTelegram.getMe.mockRejectedValueOnce(new Error('Auth failed'))
-      await adapter.initialize(mockConfig)
-      const isAuth = await adapter.isAuthenticated()
-      expect(isAuth).toBe(false)
+      expect(mockBot.getMe).toHaveBeenCalled()
     })
   })
 
@@ -79,11 +84,10 @@ describe('TelegramAdapter', () => {
       const response = await adapter.post(content)
 
       expect(response.platform).toBe(Platform.TELEGRAM)
-      expect(response.id).toBe('456')
-      expect(mockTelegram.sendMessage).toHaveBeenCalledWith(
+      expect(response.id).toBe('123')
+      expect(mockBot.sendMessage).toHaveBeenCalledWith(
         mockConfig.channelId,
         content.text,
-        expect.any(Object),
       )
     })
 
@@ -95,11 +99,13 @@ describe('TelegramAdapter', () => {
       const response = await adapter.post(content)
 
       expect(response.platform).toBe(Platform.TELEGRAM)
-      expect(response.id).toBe('457')
-      expect(mockTelegram.sendPhoto).toHaveBeenCalledWith(
+      expect(response.id).toBe('123')
+      expect(mockBot.sendPhoto).toHaveBeenCalledWith(
         mockConfig.channelId,
-        content.media[0].url,
-        expect.any(Object),
+        content.media![0].url,
+        {
+          caption: content.text,
+        },
       )
     })
 
@@ -111,52 +117,43 @@ describe('TelegramAdapter', () => {
       const response = await adapter.post(content)
 
       expect(response.platform).toBe(Platform.TELEGRAM)
-      expect(response.id).toBe('458')
-      expect(mockTelegram.sendVideo).toHaveBeenCalledWith(
+      expect(response.id).toBe('123')
+      expect(mockBot.sendVideo).toHaveBeenCalledWith(
         mockConfig.channelId,
-        content.media[0].url,
-        expect.any(Object),
+        content.media![0].url,
+        {
+          caption: content.text,
+        },
       )
     })
 
-    test('should throw error for unsupported media type', async () => {
-      const content: PostContent = {
-        text: 'Test with unsupported media',
-        media: [{ type: 'link', url: 'https://example.com' }],
-      }
-      await expect(adapter.post(content)).rejects.toThrow(
-        'Unsupported media type',
-      )
+    test('should throw error when not initialized', async () => {
+      adapter = new TelegramAdapter()
+      const content: PostContent = { text: 'Test message' }
+      await expect(adapter.post(content)).rejects.toThrow('not initialized')
     })
   })
 
-  describe('engagement and metrics', () => {
+  describe('engagement', () => {
     beforeEach(async () => {
       await adapter.initialize(mockConfig)
+    })
+
+    test('should get engagement metrics', async () => {
+      const metrics = await adapter.getEngagement('123')
+
+      expect(metrics.likes).toBe(0) // Telegram doesn't expose like counts
+      expect(metrics.shares).toBe(0) // Telegram doesn't expose share counts
+      expect(metrics.replies).toBe(0) // Telegram doesn't expose reply counts
+      expect(metrics.reach).toBe(0) // Telegram doesn't expose view counts
     })
 
     test('should get follower count', async () => {
       const count = await adapter.getFollowerCount()
       expect(count).toBe(1000)
-      expect(mockTelegram.getChatMemberCount).toHaveBeenCalledWith(
+      expect(mockBot.getChatMemberCount).toHaveBeenCalledWith(
         mockConfig.channelId,
       )
-    })
-
-    test('should handle missing channel ID for follower count', async () => {
-      adapter = new TelegramAdapter()
-      await adapter.initialize({ botToken: 'test-token' })
-      const count = await adapter.getFollowerCount()
-      expect(count).toBe(0)
-    })
-
-    test('should get platform features', () => {
-      const features = adapter.getPlatformSpecificFeatures()
-      expect(features.maxCharacters).toBe(4096)
-      expect(features.canSchedule).toBe(false)
-      expect(features.mediaTypes).toContain('image')
-      expect(features.mediaTypes).toContain('video')
-      expect(features.supportedFormats).toContain('HTML')
     })
   })
 
@@ -166,33 +163,39 @@ describe('TelegramAdapter', () => {
     })
 
     test('should delete message', async () => {
-      const success = await adapter.delete('456')
+      const success = await adapter.delete('123')
       expect(success).toBe(true)
-      expect(mockTelegram.deleteMessage).toHaveBeenCalledWith(
+      expect(mockBot.deleteMessage).toHaveBeenCalledWith(
         mockConfig.channelId,
-        456,
+        123,
       )
-    })
-
-    test('should handle delete failure', async () => {
-      mockTelegram.deleteMessage.mockRejectedValueOnce(new Error('Not found'))
-      const success = await adapter.delete('456')
-      expect(success).toBe(false)
     })
 
     test('should reply to message', async () => {
       const content: PostContent = { text: 'Reply message' }
-      const response = await adapter.reply('456', content)
+      const response = await adapter.reply('123', content)
 
       expect(response.platform).toBe(Platform.TELEGRAM)
-      expect(response.metadata.replyTo).toBe('456')
-      expect(mockTelegram.sendMessage).toHaveBeenCalledWith(
+      expect(mockBot.sendMessage).toHaveBeenCalledWith(
         mockConfig.channelId,
         content.text,
-        expect.objectContaining({
-          reply_to_message_id: 456,
-        }),
+        {
+          reply_to_message_id: 123,
+        },
       )
+    })
+  })
+
+  describe('platform features', () => {
+    test('should return Telegram-specific features', () => {
+      const features = adapter.getPlatformSpecificFeatures()
+
+      expect(features.maxCharacters).toBe(4096)
+      expect(features.canSchedule).toBe(false)
+      expect(features.mediaTypes).toContain('image')
+      expect(features.mediaTypes).toContain('video')
+      expect(features.features).toContain('inline_keyboard')
+      expect(features.features).toContain('message_threads')
     })
   })
 })

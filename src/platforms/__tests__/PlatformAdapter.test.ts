@@ -1,5 +1,10 @@
 import { Platform } from '../../domain/types'
-import { PlatformAdapter, PostContent, PostResponse } from '../PlatformAdapter'
+import {
+  PlatformAdapter,
+  PostContent,
+  PostResponse,
+  EngagementMetrics,
+} from '../PlatformAdapter'
 
 // Mock implementation for testing
 class MockPlatformAdapter implements PlatformAdapter {
@@ -37,7 +42,7 @@ class MockPlatformAdapter implements PlatformAdapter {
     return this.posts.delete(postId)
   }
 
-  async getEngagement(): Promise<any> {
+  async getEngagement(): Promise<EngagementMetrics> {
     return {
       likes: 10,
       shares: 5,
@@ -60,7 +65,7 @@ class MockPlatformAdapter implements PlatformAdapter {
     return 500
   }
 
-  getPlatformSpecificFeatures(): Record<string, any> {
+  getPlatformSpecificFeatures(): Record<string, unknown> {
     return {
       canSchedule: true,
       maxCharacters: 280,
@@ -106,12 +111,12 @@ describe('PlatformAdapter', () => {
     const content: PostContent = { text: 'To be deleted' }
     const response = await adapter.post(content)
 
-    const deleted = await adapter.delete(response.id)
+    const deleted: boolean = await adapter.delete(response.id)
     expect(deleted).toBe(true)
   })
 
   test('should get engagement metrics', async () => {
-    const metrics = await adapter.getEngagement('test-id')
+    const metrics: EngagementMetrics = await adapter.getEngagement('test-id')
     expect(metrics.likes).toBeDefined()
     expect(metrics.shares).toBeDefined()
     expect(metrics.replies).toBeDefined()

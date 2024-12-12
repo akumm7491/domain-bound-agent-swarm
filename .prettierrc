@@ -4,5 +4,15 @@
   "singleQuote": true,
   "printWidth": 80,
   "tabWidth": 2,
-  "arrowParens": "avoid"
+  "arrowParens": "avoid",
+  "overrides": [
+    {
+      "files": ["*.yaml", "*.yml"],
+      "options": {
+        "parser": "yaml",
+        "singleQuote": false,
+        "bracketSpacing": false
+      }
+    }
+  ]
 } 

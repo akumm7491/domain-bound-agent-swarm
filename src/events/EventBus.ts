@@ -1,5 +1,3 @@
-import { EventEmitter } from 'events'
-
 export enum EventType {
   CONTENT_CREATED = 'content.created',
   CONTENT_SCHEDULED = 'content.scheduled',
@@ -23,13 +21,14 @@ export interface Event {
   }
 }
 
+type EventHandler = (event: Event) => Promise<void>
+
 export class EventBus {
-  private emitter: EventEmitter
   private static instance: EventBus
+  private handlers: Map<EventType, Set<EventHandler>>
 
   private constructor() {
-    this.emitter = new EventEmitter()
-    this.emitter.setMaxListeners(100) // Adjust based on needs
+    this.handlers = new Map()
   }
 
   public static getInstance(): EventBus {
@@ -40,20 +39,39 @@ export class EventBus {
   }
 
   async publish(event: Event): Promise<void> {
-    this.emitter.emit(event.type, event)
+    const handlers = this.handlers.get(event.type) || new Set()
+
+    // Execute all handlers concurrently but catch their errors
+    const promises = Array.from(handlers).map(async handler => {
+      try {
+        await handler(event)
+      } catch (error) {
+        console.error(`Error in event handler for ${event.type}:`, error)
+      }
+    })
+
+    try {
+      // Wait for all handlers to complete
+      await Promise.all(promises)
+    } catch (error) {
+      console.error(`Error in event handler for ${event.type}:`, error)
+    }
   }
 
-  subscribe(
-    eventType: EventType,
-    handler: (event: Event) => Promise<void>,
-  ): void {
-    this.emitter.on(eventType, handler)
+  subscribe(eventType: EventType, handler: EventHandler): void {
+    if (!this.handlers.has(eventType)) {
+      this.handlers.set(eventType, new Set())
+    }
+    this.handlers.get(eventType)!.add(handler)
   }
 
-  unsubscribe(
-    eventType: EventType,
-    handler: (event: Event) => Promise<void>,
-  ): void {
-    this.emitter.off(eventType, handler)
+  unsubscribe(eventType: EventType, handler: EventHandler): void {
+    const handlers = this.handlers.get(eventType)
+    if (handlers) {
+      handlers.delete(handler)
+      if (handlers.size === 0) {
+        this.handlers.delete(eventType)
+      }
+    }
   }
 }

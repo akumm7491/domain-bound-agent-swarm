@@ -2,88 +2,68 @@ version: '3.8'
 
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    platform: linux/arm64/v8
+    image: asmmp:latest
+    environment:
+      - REDIS_URL=redis://:password123@redis:6379
+      - NODE_ENV=development
+      - OPENAI_API_KEY=dummy-key
+      - DISABLE_PLATFORM_INIT=true
+      - DISABLE_TWITTER=true
+      - DISABLE_TELEGRAM=true
+      - DISABLE_DISCORD=true
     ports:
       - '3000:3000'
-    environment:
-      - NODE_ENV=development
-      - REDIS_URL=redis://redis:6379
-      - LOG_LEVEL=debug
-    volumes:
-      - ./logs:/app/logs
-      - ./data:/app/data
-      - ./src:/app/src:ro
     depends_on:
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    restart: unless-stopped
 
   redis:
-    image: redis:7.0-alpine
-    platform: linux/arm64/v8
-    command: redis-server /usr/local/etc/redis/redis.conf
+    image: redis:alpine
+    command: redis-server --requirepass password123 --protected-mode no
     ports:
       - '6379:6379'
     volumes:
       - redis_data:/data
-      - ./k8s/redis.conf:/usr/local/etc/redis/redis.conf:ro
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
+      test: ['CMD', 'redis-cli', '-a', 'password123', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   redis-insight:
     image: redislabs/redisinsight:latest
-    platform: linux/arm64/v8
     ports:
       - '8001:8001'
     volumes:
       - redis-insight:/db
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
-    platform: linux/arm64/v8
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus:/etc/prometheus
       - prometheus_data:/prometheus
-    ports:
-      - '9090:9090'
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
-    restart: unless-stopped
+    ports:
+      - '9090:9090'
 
   grafana:
     image: grafana/grafana:latest
-    platform: linux/arm64/v8
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./k8s/monitoring.yaml:/etc/grafana/provisioning/dashboards/asmmp.yaml:ro
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
     ports:
       - '3001:3000'
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
-    restart: unless-stopped
 
 volumes:
   redis_data:

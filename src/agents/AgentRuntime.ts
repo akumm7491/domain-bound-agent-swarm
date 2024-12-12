@@ -5,6 +5,7 @@ import { EventBus, EventType } from '../events/EventBus'
 import Bull from 'bull'
 import Redis from 'ioredis'
 import winston from 'winston'
+import { ContentGenerator } from '../content/ContentGenerator'
 
 export interface AgentRuntimeConfig {
   redis: {
@@ -26,6 +27,7 @@ export class AgentRuntime {
   private redis: Redis
   private logger: winston.Logger
   private eventBus: EventBus
+  private contentGenerator: ContentGenerator
 
   constructor(
     config: AgentRuntimeConfig,
@@ -34,6 +36,25 @@ export class AgentRuntime {
     this.redis = new Redis(config.redis.url)
     this.contentQueue = new Bull('content-generation', config.redis.url)
     this.eventBus = EventBus.getInstance()
+    this.contentGenerator = new ContentGenerator({
+      openai: {
+        apiKey: config.openai.apiKey,
+        model: 'gpt-4',
+      },
+      templates: [
+        {
+          id: 'news-update',
+          name: 'News Update',
+          description: 'Share latest news',
+          prompt: 'Create news about {topic}',
+          variables: ['topic'],
+          platforms: [Platform.TWITTER],
+          format: {
+            maxLength: 280,
+          },
+        },
+      ],
+    })
 
     this.logger = winston.createLogger({
       level: 'info',
@@ -52,6 +73,32 @@ export class AgentRuntime {
   registerAgent(domain: string, platforms: Platform[]): SocialAgent {
     const agent = this.agentFactory.createAgent(domain, platforms)
     this.agents.set(agent.id, agent)
+
+    // Publish strategy update event
+    this.eventBus.publish({
+      id: Math.random().toString(36).substring(7),
+      type: EventType.STRATEGY_UPDATED,
+      agentId: agent.id,
+      timestamp: new Date(),
+      payload: agent.contentStrategy,
+      metadata: {
+        domain: agent.domain,
+        platform: platforms[0],
+        priority: 1,
+      },
+    })
+
+    // Schedule content generation for this agent
+    this.contentQueue.add(
+      'generate-content',
+      { agentId: agent.id },
+      {
+        repeat: {
+          every: 3600000, // 1 hour
+        },
+      },
+    )
+
     return agent
   }
 
@@ -91,7 +138,7 @@ export class AgentRuntime {
   private setupContentQueue(
     config: AgentRuntimeConfig['contentGeneration'],
   ): void {
-    this.contentQueue.process(async job => {
+    this.contentQueue.process('generate-content', async job => {
       const { agentId } = job.data
       const agent = this.agents.get(agentId)
 
@@ -99,19 +146,45 @@ export class AgentRuntime {
         throw new Error(`Agent ${agentId} not found`)
       }
 
-      // Process content generation
-      // Implementation details...
-    })
+      // Generate content for each platform
+      for (const platform of agent.platforms) {
+        const adapter = this.platforms.get(platform)
+        if (!adapter) {
+          throw new Error(`Platform ${platform} not configured`)
+        }
 
-    // Schedule content generation jobs
-    this.contentQueue.add(
-      {},
-      {
-        repeat: {
-          every: config.interval,
-        },
-      },
-    )
+        try {
+          const content = await this.contentGenerator.generateContent({
+            templateId: 'news-update',
+            variables: {
+              domain: agent.domain,
+              platform: platform.toString(),
+            },
+            platforms: [platform],
+          })
+
+          // Publish content created event
+          await this.eventBus.publish({
+            id: Math.random().toString(36).substring(7),
+            type: EventType.CONTENT_CREATED,
+            agentId: agent.id,
+            timestamp: new Date(),
+            payload: content.content,
+            metadata: {
+              domain: agent.domain,
+              platform,
+              priority: 1,
+            },
+          })
+        } catch (error) {
+          this.logger.error(
+            `Failed to generate content for agent ${agent.id}:`,
+            error,
+          )
+          throw error
+        }
+      }
+    })
   }
 
   async start(): Promise<void> {

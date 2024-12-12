@@ -1,0 +1,21 @@
+# Dependencies
+node_modules
+dist
+
+# Build output
+build
+coverage
+
+# YAML files
+*.yaml
+*.yml
+
+# Docker files
+Dockerfile
+.dockerignore
+
+# Kubernetes files
+k8s/
+
+# Documentation
+*.md 

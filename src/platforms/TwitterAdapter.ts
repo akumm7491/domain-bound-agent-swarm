@@ -1,4 +1,4 @@
-import { TwitterApi } from 'twitter-api-v2'
+import { Client } from 'twitter-api-sdk'
 import { Platform } from '../domain/types'
 import {
   PlatformAdapter,
@@ -16,70 +16,57 @@ export interface TwitterConfig {
 
 export class TwitterAdapter implements PlatformAdapter {
   platform = Platform.TWITTER
-  private client: TwitterApi | null = null
-  private config: TwitterConfig | null = null
+  private client: Client | null = null
 
   async initialize(config: TwitterConfig): Promise<void> {
-    this.config = config
-    this.client = new TwitterApi({
-      appKey: config.apiKey,
-      appSecret: config.apiSecret,
-      accessToken: config.accessToken,
-      accessSecret: config.accessTokenSecret,
-    })
+    this.client = new Client(config.apiKey)
   }
 
   async isAuthenticated(): Promise<boolean> {
     if (!this.client) return false
     try {
-      const user = await this.client.v2.me()
-      return !!user.data
+      await this.client.users.findMyUser()
+      return true
     } catch {
       return false
     }
   }
 
   async post(content: PostContent): Promise<PostResponse> {
-    if (!this.client) throw new Error('Twitter client not initialized')
+    if (!this.client) {
+      throw new Error('Twitter adapter not initialized')
+    }
 
-    const mediaIds = await this.uploadMedia(content.media || [])
-    const mediaIdsTuple = mediaIds.slice(0, 4) as
-      | [string]
-      | [string, string]
-      | [string, string, string]
-      | [string, string, string, string]
+    const params: any = { text: content.text }
 
-    const tweet = await this.client.v2.tweet(content.text, {
-      media: mediaIds.length ? { media_ids: mediaIdsTuple } : undefined,
-    })
+    if (content.media?.length) {
+      params.media = {
+        media_ids: content.media.map(m => m.url),
+      }
+    }
 
-    if (!tweet.data) {
+    const response = await this.client.tweets.createTweet(params)
+
+    if (!response.data) {
       throw new Error('Failed to create tweet')
     }
 
     return {
-      id: tweet.data.id,
+      id: response.data.id,
       platform: Platform.TWITTER,
+      url: `https://twitter.com/i/status/${response.data.id}`,
       timestamp: new Date(),
-      url: `https://twitter.com/i/web/status/${tweet.data.id}`,
-      metadata: tweet.data,
+      metadata: response.data,
     }
   }
 
-  async schedule(
-    _content: PostContent,
-    _publishAt: Date,
-  ): Promise<PostResponse> {
-    // Note: Twitter API v2 doesn't support scheduling directly
-    // We'll need to implement this using a job queue
-    throw new Error('Scheduling not implemented for Twitter')
-  }
-
   async delete(postId: string): Promise<boolean> {
-    if (!this.client) throw new Error('Twitter client not initialized')
+    if (!this.client) {
+      throw new Error('Twitter adapter not initialized')
+    }
 
     try {
-      await this.client.v2.deleteTweet(postId)
+      await this.client.tweets.deleteTweetById(postId)
       return true
     } catch {
       return false
@@ -87,94 +74,94 @@ export class TwitterAdapter implements PlatformAdapter {
   }
 
   async getEngagement(postId: string): Promise<EngagementMetrics> {
-    if (!this.client) throw new Error('Twitter client not initialized')
+    if (!this.client) {
+      throw new Error('Twitter adapter not initialized')
+    }
 
-    const tweet = await this.client.v2.singleTweet(postId, {
+    const tweet = await this.client.tweets.findTweetById(postId, {
       'tweet.fields': ['public_metrics'],
     })
+
+    if (!tweet.data) {
+      throw new Error('Failed to get tweet metrics')
+    }
 
     const metrics = tweet.data.public_metrics || {
       like_count: 0,
       retweet_count: 0,
       reply_count: 0,
-      impression_count: 0,
       quote_count: 0,
     }
 
     return {
-      likes: metrics.like_count,
-      shares: metrics.retweet_count,
-      replies: metrics.reply_count,
-      reach: metrics.impression_count,
-      platformSpecific: {
-        quotes: metrics.quote_count,
-      },
+      likes: metrics.like_count || 0,
+      shares: metrics.retweet_count || 0,
+      replies: metrics.reply_count || 0,
+      reach: (metrics.quote_count || 0) + (metrics.retweet_count || 0),
+      platformSpecific: metrics,
     }
   }
 
   async reply(postId: string, content: PostContent): Promise<PostResponse> {
-    if (!this.client) throw new Error('Twitter client not initialized')
+    if (!this.client) {
+      throw new Error('Twitter adapter not initialized')
+    }
 
-    const mediaIds = await this.uploadMedia(content.media || [])
-    const mediaIdsTuple = mediaIds.slice(0, 4) as
-      | [string]
-      | [string, string]
-      | [string, string, string]
-      | [string, string, string, string]
+    const params: any = {
+      text: content.text,
+      reply: {
+        in_reply_to_tweet_id: postId,
+      },
+    }
 
-    const tweet = await this.client.v2.reply(content.text, postId, {
-      media: mediaIds.length ? { media_ids: mediaIdsTuple } : undefined,
-    })
+    if (content.media?.length) {
+      params.media = {
+        media_ids: content.media.map(m => m.url),
+      }
+    }
+
+    const response = await this.client.tweets.createTweet(params)
+
+    if (!response.data) {
+      throw new Error('Failed to create reply')
+    }
 
     return {
-      id: tweet.data.id,
+      id: response.data.id,
       platform: Platform.TWITTER,
+      url: `https://twitter.com/i/status/${response.data.id}`,
       timestamp: new Date(),
-      url: `https://twitter.com/i/web/status/${tweet.data.id}`,
-      metadata: { ...tweet.data, replyTo: postId },
+      metadata: response.data,
     }
   }
 
   async getFollowerCount(): Promise<number> {
-    if (!this.client) throw new Error('Twitter client not initialized')
+    if (!this.client) {
+      throw new Error('Twitter adapter not initialized')
+    }
 
-    const user = await this.client.v2.me({
+    const user = await this.client.users.findMyUser({
       'user.fields': ['public_metrics'],
     })
 
-    return user.data.public_metrics?.followers_count || 0
+    return user.data?.public_metrics?.followers_count || 0
   }
 
-  async getReachMetrics(postId: string): Promise<number> {
-    const engagement = await this.getEngagement(postId)
-    return engagement.reach
-  }
-
-  getPlatformSpecificFeatures(): Record<string, any> {
+  getPlatformSpecificFeatures(): Record<string, unknown> {
     return {
-      canSchedule: false,
       maxCharacters: 280,
-      mediaTypes: ['image', 'video', 'gif'],
-      maxMediaPerPost: 4,
+      canSchedule: true,
+      mediaTypes: ['image', 'video'],
+      features: ['threads', 'polls'],
     }
   }
 
-  private async uploadMedia(media: PostContent['media']): Promise<string[]> {
-    if (!this.client || !media?.length) return []
+  async schedule(content: PostContent, publishAt: Date): Promise<PostResponse> {
+    throw new Error('Twitter does not support scheduling posts')
+  }
 
-    const mediaIds = await Promise.all(
-      media.map(async item => {
-        if (item.type !== 'image' && item.type !== 'video') return null
-
-        try {
-          const mediaId = await this.client!.v1.uploadMedia(item.url)
-          return mediaId
-        } catch {
-          return null
-        }
-      }),
-    )
-
-    return mediaIds.filter((id): id is string => id !== null)
+  async getReachMetrics(postId: string): Promise<number> {
+    const metrics = await this.getEngagement(postId)
+    return metrics.reach
   }
 }

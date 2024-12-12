@@ -1,5 +1,5 @@
 // Extend Jest matchers
-import '@types/jest'
+import 'jest'
 
 // Set test environment variables
 process.env.NODE_ENV = 'test'
