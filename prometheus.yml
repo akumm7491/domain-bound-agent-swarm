@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Scrape configurations
+scrape_configs:
+  - job_name: 'agent-swarm'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['app:3000']
+    scrape_interval: 5s
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090'] 

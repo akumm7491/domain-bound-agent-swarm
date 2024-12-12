@@ -11,7 +11,7 @@ COPY package*.json ./
 COPY package-lock.json ./
 
 # Install all dependencies including devDependencies
-RUN npm ci
+RUN HUSKY=0 npm ci
 
 # Copy source code
 COPY . .
@@ -32,7 +32,7 @@ COPY package*.json ./
 COPY package-lock.json ./
 
 # Install production dependencies only
-RUN npm ci --omit=dev
+RUN HUSKY=0 npm ci --omit=dev
 
 # Copy built files from builder stage
 COPY --from=builder /app/dist ./dist
@@ -48,7 +48,8 @@ EXPOSE 3000
 
 # Set environment variables
 ENV NODE_ENV=production \
-    PORT=3000
+    PORT=3000 \
+    HUSKY=0
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
